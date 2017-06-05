@@ -28,10 +28,14 @@
 #////////////////////////////////////////////////////////////////////////////// 
 # Program Information 
 # 
-PROGRAM_NAME = "b" 
-PROGRAM_DESC = "" 
+PROGRAM_NAME = "solfa" 
+PROGRAM_DESC = "Encrypts and decrypts messages using the Solfa cipher." 
 PROGRAM_USAGE = '''
-%(prog)s " 
+%(prog)s -m <message> [--decrypt] 
+	-kc [treble|alto|bass] 
+	-kt [C|C#|Db|D|Eb|E|F|F#|Gb|G|Ab|A|Bb|B] 
+	-km [major|minor|dorian|phrygian|lydian|mixolydian|locrian]
+	-kr [1/4|1/8|1/16]
 '''
 
 __version_info__ = ('0','1','0') 
@@ -366,6 +370,9 @@ class SolfaMatrix(object):
 		return plain_char		
 
 	def translate_multiple_notes(self, _notes):
+		'''
+		
+		'''
 		plaintext = ""
 		for note in _notes:
 			if len(note) == 2:
