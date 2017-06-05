@@ -78,6 +78,38 @@ SOLFA_CLEFS = [
 	SOLFA_CLEF_BASS
 ]
 
+SOLFA_TONE_C = "C"
+SOLFA_TONE_C_SHARP = "C#"
+SOLFA_TONE_D_FLAT = "Db"
+SOLFA_TONE_D = "D"
+SOLFA_TONE_E_FLAT = "Eb"
+SOLFA_TONE_E = "E"
+SOLFA_TONE_F = "F"
+SOLFA_TONE_F_SHARP = "F#"
+SOLFA_TONE_G_FLAT = "Gb"
+SOLFA_TONE_G = "G"
+SOLFA_TONE_A_FLAT = "Ab"
+SOLFA_TONE_A = "A"
+SOLFA_TONE_B = "B"
+SOLFA_TONE_B_FLAT = "Bb"
+
+SOLFA_TONES = [
+	SOLFA_TONE_C,
+	SOLFA_TONE_C_SHARP,
+	SOLFA_TONE_D_FLAT,
+	SOLFA_TONE_D,
+	SOLFA_TONE_E_FLAT,
+	SOLFA_TONE_E,
+	SOLFA_TONE_F,
+	SOLFA_TONE_F_SHARP,
+	SOLFA_TONE_G_FLAT,
+	SOLFA_TONE_G,
+	SOLFA_TONE_A_FLAT,
+	SOLFA_TONE_A,
+	SOLFA_TONE_B_FLAT,
+	SOLFA_TONE_B
+]
+
 SOLFA_MODE_MAJOR = "major"
 SOLFA_MODE_DORIAN = "dorian"
 SOLFA_MODE_PHRYGIAN = "phrygian"
@@ -157,8 +189,27 @@ crypto_options.add_argument("-d", "--decrypt",
 	dest="do_decrypt", 
 	action="store_true",
 	help="Tells the program to decrypt the provided message. If not specified, the program will encrypt the provided message by default.")
-key_options =parser.add_argument_group("Key Options", "Options relating to the encryption key")	
-	
+key_options =parser.add_argument_group("Key Options", "Options relating to the encryption key")
+key_options.add_argument("-kc", "--clef",
+	dest="key_clef",
+	default=SOLFA_CLEF_TREBLE,
+	choices=SOLFA_CLEFS,
+	help="Specifies the clef of the encryption key.")
+key_options.add_argument("-kt", "--tonic",
+	dest="key_tonic",
+	default=SOLFA_TONE_C,
+	choices=SOLFA_TONES,
+	help="Specifies the tonic of the key.")
+key_options.add_argument("-km", "--mode",
+	dest="key_mode",
+	default=SOLFA_MODE_MAJOR,
+	choices=SOLFA_MODES,
+	help="Specifies the mode of the encryption key.")
+key_options.add_argument("-kr", "--rhythm",
+	dest="key_rhythm",
+	default=SOLFA_RHYTHM_EIGHTH,
+	choices=SOLFA_RHYTHMS,
+	help="Specifies the rhythm of the key.")
 #//////////////////////////////////////////////////////////////////////////////
 # Code
 #
@@ -298,6 +349,15 @@ class SolfaMatrix(object):
 		return cipher_chars
 	
 	def translate_single_note(self, _note, _tempo):
+		'''
+		Translate the given note and tempo into the corresponding
+		character from the matrix.
+		
+		@param _note The note to translate
+		@param _tempo The associated tempo of the note.
+		@return The single character related to the note, or
+			an empty string if no corresponding letter found.
+		'''
 		plain_char = ""
 		index = int(_tempo) - 1
 		if _note in self.matrix.keys():
@@ -739,6 +799,8 @@ class SolfaPlainMessage(SolfaMessage):
 		else:
 			return 0
 	
+	#Todo: Rename this function. Simplify
+	# 
 	def _to_abc_notation(self, _chromatic_notes_and_beats, _bar_value):
 		'''
 		
