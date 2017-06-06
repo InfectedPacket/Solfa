@@ -371,7 +371,22 @@ class SolfaMatrix(object):
 
 	def translate_multiple_notes(self, _notes):
 		'''
+		Translate a list of multiple notes into characters using the 
+		matrix translation.
 		
+		The function will iterate through each tuple and use the
+		SolfaMatrix.translate_single_note function to obtain the
+		corresponding character. If no matching character are found,
+		an empty string is returned.
+		
+		>> notes_and_tempo = [("d", 1), ("r", 2)]
+		>> matrix = SolfaMatrix()
+		>> text = matrix.translate_multiple_notes(notes_and_tempo)
+		>> print text
+		TZ
+		
+		@param _notes A list of tuples representing notes with their tempo.
+		@return A string of characters corresponding to each note.
 		'''
 		plaintext = ""
 		for note in _notes:
@@ -408,12 +423,51 @@ class SolfaKey(object):
 		self.scale = []
 		self._scale()
 		
+	@staticmethod
+	def from_abc_string(_abc_string):
+		'''
+		
+		'''
+		solfa_key = SolfaKey(
+			_clef = SOLFA_UNDEFINED,
+			_tonic = SOLFA_UNDEFINED,
+			_mode = SOLFA_UNDEFINED,
+			_rhythm = SOLFA_UNDEFINED,
+			_meter = SOLFA_UNDEFINED)
+		
+		if len(_abc_string) > 0:
+			tune_metadata = re.findall(r'\[([^]]*)\]', _abc_string)
+			for tune_meta_item in tune_metadata:
+				print tune_meta_item
+				if ":" in tune_meta_item:
+					(meta_property, meta_value) = tune_meta_item.split(":", 1)
+					if meta_property.upper() == "K":
+						matches = re.match("(\w+\s?\w+)\s*clef\s*=\s*(\w+)", meta_value)
+						if matches != None:
+							(tune_key, solfa_key.clef) = matches.groups()
+							solfa_key.tonic = tune_key[0].upper()
+							if " " in tune_key:
+								solfa_key.mode = tune_key.split(" ", 1)[1].lower()
+							else:
+								solfa_key.mode = tune_key[1:].lower()
+							
+					elif meta_property.upper() == "L":
+						solfa_key.rhythm_unit = meta_value
+					elif meta_property.upper() == "M":
+						solfa_key.meter = meta_value
+
+		#solfa_key.scale = re.findall(r'([ABCDEFGz],?[1-4])', _abc_string, flags=re.IGNORECASE)
+		solfa_key._scale()
+		return solfa_key
+		
 	def _scale(self):
 		'''
-		Creates the scale of the key based on its properties, i.e. clef, tone, mode and rhythm.
+		Creates the scale of the key based on its properties, i.e. clef, tone,
+		mode and rhythm.
 		'''
 		shift = 0 #todo: remove shift. Unneeded here.
 		tonic = 0
+		self.scale = []
 		if self.tonic[0] == SOLFA_TONE_C:
 			if self.clef == SOLFA_CLEF_TREBLE or self.clef == SOLFA_CLEF_ALTO:
 					tonic = shift + 13
@@ -1071,6 +1125,7 @@ def test():
 	test_encrypt_abcde_treble_major_eight()
 	test_decrypt_abcde_treble_major_eight2()
 	test_encrypt_12345_treble_major_eight()
+	test_key_init()
 
 def test_encrypt_abcde_treble_major_eight():
 
@@ -1125,7 +1180,7 @@ def test_encrypt_12345_treble_major_eight():
 	assert test_result	
 	
 def test_decrypt_abcde_treble_major_eight2():
-	key = "[K:C Major treble] [L:1/8] [M:none] \"D\"C \"R\"D \"M\"E \"F\"F \"S\"G \"L\"A \"T\"B |] !"
+	key = "[K:C major clef=treble] [L:1/8] [M:none] \"D\"C \"R\"D \"M\"E \"F\"F \"S\"G \"L\"A \"T\"B |] !"
 	tune = "[K:C major clef=none] [L:1/8] [M:none] E3 A1 z2 D2 z2 G2 G4"
 	solfa_key = SolfaKey(
 		_clef = SOLFA_CLEF_TREBLE, 
@@ -1138,6 +1193,15 @@ def test_decrypt_abcde_treble_major_eight2():
 	print plaintext	
 	assert plaintext == "ABCDE"
 
+def test_key_init():
+	solfa_key_manual = SolfaKey(
+		_clef = SOLFA_CLEF_TREBLE, 
+		_tonic = "C",
+		_mode = SOLFA_MODE_MAJOR, 
+		_rhythm = SOLFA_RHYTHM_EIGHTH)
+	solfa_key_auto = SolfaKey.from_abc_string("[K:C major clef=treble] [L:1/8] [M:none] \"D\"C \"R\"D \"M\"E \"F\"F \"S\"G \"L\"A \"T\"B |] !")
+	print "[>] Manual: " + str(solfa_key_manual)
+	print "[>] Auto  : " + str(solfa_key_auto)
 #////////////////////////////////////////////////////////////////////////////// 
 # Main
 #
