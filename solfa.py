@@ -402,6 +402,7 @@ class SolfaKey(object):
 	'''
 	def __init__(self, _clef, _tonic, _mode, _rhythm, _meter = "4/4"):
 		'''
+		Initializes a Solfa key based on the given parameters.
 		
 		@param _clef The clef of the Solfa key. Can be any of the value 
 			defined in SOLFA_CLEFS
@@ -415,10 +416,26 @@ class SolfaKey(object):
 		
 		'''
 		#TODO: Check for input values and throw exceptins if needed.
-		self.clef = _clef
-		self.tonic = _tonic
-		self.mode = _mode
-		self.rhythm_unit = _rhythm
+		clef = _clef.lower().strip()
+		if not (clef in SOLFA_CLEFS or clef == SOLFA_UNDEFINED):
+			raise Exception("Invalid clef value provided: {:s}".format(_clef))
+		
+		tonic = _tonic.strip()
+		if not (tonic in SOLFA_TONES or tonic == SOLFA_UNDEFINED):
+			raise Exception("Invalid tonic value provided: {:s}".format(_tonic))
+			
+		mode = _mode.lower().strip()
+		if not (mode in SOLFA_MODES or mode == SOLFA_UNDEFINED):
+			raise Exception("Invalid mode value provided: {:s}".format(_mode))
+	
+		rhythm = _rhythm.strip()
+		if not (rhythm in SOLFA_RHYTHMS or rhythm == SOLFA_UNDEFINED):
+			raise Exception("Invalid rhythm value provided: {:s}".format(_rhythm))
+			
+		self.clef = clef
+		self.tonic = tonic
+		self.mode = mode
+		self.rhythm_unit = rhythm
 		self.meter = _meter
 		self.scale = []
 		self._scale()
@@ -426,7 +443,11 @@ class SolfaKey(object):
 	@staticmethod
 	def from_abc_string(_abc_string):
 		'''
+		Generates a Solfa key from a string in ABC notation.
 		
+		@param _abc_string A ABC formatted string containing a definition of a key.
+		@return A SolfaKey object based on the ABC string provided.
+		@throws Exception if invalid values are provided within the ABC notated string.
 		'''
 		solfa_key = SolfaKey(
 			_clef = SOLFA_UNDEFINED,
