@@ -367,6 +367,7 @@ class SolfaMatrix(object):
 		if _note in self.matrix.keys():
 			if index >= 0 and index < len(self.matrix[SOLFA_DO]):
 				plain_char = self.matrix[_note][index]
+		print "({:s}, {:d}) -> {:s}".format(_note, _tempo, plain_char)
 		return plain_char		
 
 	def translate_multiple_notes(self, _notes):
@@ -548,9 +549,9 @@ class SolfaKey(object):
 		'''
 		key = self.mode
 		if self.tonic != SOLFA_UNDEFINED:
-			key = "{md:s} {tn:s}".format(md=self.mode, tn=self.tonic)
+			key = "{tn:s} {md:s}".format(md=self.mode, tn=self.tonic)
 			
-		abc_format = "[K:{k:s} clef={clef:s}] [L:{rhythm:s}] [M:{meter:s}] {scale:s}"
+		abc_format = "[K:{k:s} clef={clef:s}] [L:{rhythm:s}] [M:{meter:s}]"
 		scale_str = ' '.join(
 			"\"{nt:s}\"{ct:s}".format(
 				nt=solfa_note, 
@@ -559,8 +560,7 @@ class SolfaKey(object):
 			k=key,
 			clef=self.clef,
 			rhythm=self.rhythm_unit,
-			meter=self.meter,
-			scale=scale_str)
+			meter=self.meter)
 	
 
 	@staticmethod
@@ -639,12 +639,22 @@ class SolfaCipherMessage(SolfaMessage):
 		self.notes = []
 		self._parse()
 			
+	def __str__(self):
+		fmt = "{dkey:s} | {notes:s}"
+		s = fmt.format(
+			dkey = str(self.decoy_key),
+			notes = self.message)
+		return s
+			
 	def decrypt(self, _solfa_key, _matrix = None):
 		'''
+		Decrypts the current message using the provided key and matrix (optional)
 		
 		@param _solfa_key The Solfa key used to encrypt the current message.
 		@param _matrix The translation matrix. If none are specified, the
 			default translation matrix will be generated.
+			
+		@return The plaintext message resulting from the decryption process.
 		'''
 		self.key = _solfa_key
 		self.matrix = _matrix
@@ -659,12 +669,21 @@ class SolfaCipherMessage(SolfaMessage):
 		# Generate the map used to convert chromatic notes to solfege notes using
 		# the scale of the key.
 		chromatic_to_solfege_map = self._generate_scale_map()
+		print "Map:"
+		print chromatic_to_solfege_map
 		
 		solfege_translation = self.translate_to_solfege(
 			self.notes, chromatic_to_solfege_map)
 			
+		print "Translation:"
+		print solfege_translation
+			
 		# Converts notes and beats to a list of tuple of notes and tempo of the note.
 		notes_and_tempo = self._to_notes_and_tempo(solfege_translation)
+		
+		print "Notes/Duration:"
+		print notes_and_tempo
+		
 		plaintext = self.matrix.translate_multiple_notes(notes_and_tempo)
 		return plaintext
 	
@@ -685,11 +704,14 @@ class SolfaCipherMessage(SolfaMessage):
 					(meta_property, meta_value) = tune_meta_item.split(":", 1)
 					if meta_property.upper() == "K":
 						(tune_key, tune_clef) = re.match("(\w\s?\w+)\s*clef\s*=\s*(\w+)", meta_value).groups()
-						tune_tonic = tune_key[0].upper()
-						if " " in tune_key:
-							tune_mode = tune_key.split(" ", 1)[1].lower()
+						if tune_tonic != SOLFA_UNDEFINED:
+							tune_tonic = tune_key[0].upper()
+							if " " in tune_key:
+								tune_mode = tune_key.split(" ", 1)[1].lower()
+							else:
+								tune_mode = tune_key[1:].lower()
 						else:
-							tune_mode = tune_key[1:].lower()
+							tune_mode = SOLFA_UNDEFINED
 							
 					elif meta_property.upper() == "L":
 						tune_rhythm_unit = meta_value
@@ -714,11 +736,18 @@ class SolfaCipherMessage(SolfaMessage):
 					self.notes.append((note, 1))
 				else:
 					self.notes.append((note[:-1], int(note[-1])))
-	
+			print "Notes:"
+			print self.notes
+			
 	def _generate_scale_map(self):
 		start_index = SCALES.index(self.key.scale[0][1])
-		scale_list = SCALES[start_index:] + SCALES[:start_index-1]
-		notes_zipped = zip(scale_list, SOLFA_NOTES*5)
+		#scale_list = SCALES[start_index:] + SCALES[:start_index]
+		#notes_zipped = zip(scale_list, SOLFA_NOTES*5)
+		low = zip(list(reversed(SCALES[:start_index])), list(reversed(SOLFA_NOTES*5)))
+		high = zip(SCALES[start_index:], SOLFA_NOTES*5)
+		notes_zipped = low + high
+		print "Zipped:"
+		print notes_zipped
 		notes_map = {}
 		for (chrome_note, solfa_note) in notes_zipped:
 			notes_map[chrome_note] = solfa_note
@@ -864,17 +893,17 @@ class SolfaPlainMessage(SolfaMessage):
 		self.key = _solfa_key
 		self.matrix = _matrix
 		self.decoy_key = _decoy_key
-		
+		message = re.sub('\s+', '', self.message.strip().upper())
 		# Initializes the default matrix and decoy key
 		# if not defined.
 		if self.matrix == None: 
 			self.matrix = SolfaMatrix()
 		if self.decoy_key == None: 
-			self.decoy_key = super(SolfaPlainMessage, self)._generate_default_decoy_key()
+			self.decoy_key = super(SolfaPlainMessage, self)._generate_default_key()
 		
 		# Translate plain text message into a solfege note and a timing,
 		# ex. T -> ("d", 1)
-		translated_notes = self.matrix.translate_string(self.message)
+		translated_notes = self.matrix.translate_string(message)
 		
 		tonic = self._calculate_delta_tonic(self.key, self.decoy_key)
 		
@@ -1014,6 +1043,9 @@ class SolfaPlainMessage(SolfaMessage):
 			return 0
 
 	def _beats_to_notes(self, _chromatic_notes_and_beats, _bar_value):
+		'''
+		
+		'''
 		notes_and_timings = []
 		idx_note = 0
 		bar = _bar_value
@@ -1138,16 +1170,61 @@ def calculate_tonic(_key, _decoy_key):
 		return tonic
 	
 def test():
+	test_solfa()
 	#test_abcde_treble_major_eight()
 	#test_hello_alto_minor_quarter()
 	#test_secret_bass_phrygian_sixteen_decoy_1()
 	#test_decrypt_abcde_treble_major_eight()
 	#test_decrypt_abcde_alto_major_eight()
-	test_encrypt_abcde_treble_major_eight()
-	test_decrypt_abcde_treble_major_eight2()
-	test_encrypt_12345_treble_major_eight()
-	test_key_init()
+	#test_encrypt_abcde_treble_major_eight()
+	#test_decrypt_abcde_treble_major_eight2()
+	#test_encrypt_12345_treble_major_eight()
+	#test_key_init()
+	#test_decrypt_nsec_tune()
+	#test_translate()
 
+def test_solfa():
+	tests = [
+		(
+		# Encryption key
+		"[K:C major clef=treble] [L:1/8] [M:4/4]",
+		# Plain text Message
+		"This is the first test", 					
+		# Expected result:
+		"[K:C major clef=treble] [L:1/8] [M:4/4] | D1 M3 R1 F1 R1 F1 D1 M3 S1 D4 R1 D3 F1 D1 D1 S1 F1 D1",
+		# ABC Notation of Cipher text
+		"[K:none clef=none] [L:none] [M:none] | C2 E2 D4 F4 D4 F4 C2 E2 G3 C1 D2 C2 F4 C4 C4 G4 F4 C4"
+		)
+	]
+	
+	for (t_key, t_pt, t_res, t_abc) in tests:
+		print ("-"*80)
+		
+		solfa_key = SolfaKey.from_abc_string(t_key)
+		
+		print "[>] Solfa Key Test"
+		print "\tProvided: {:s}\n\t Created: {:s}".format(
+			t_key, str(solfa_key))
+		assert str(solfa_key) == t_key
+		
+		solfa_plain_msg = SolfaPlainMessage(t_pt)
+		ciphertext = str(solfa_plain_msg.encrypt(solfa_key))
+		
+		print "[>] Cipher Text Test"
+		print "\tProvided: {:s}\n\t Created: {:s}".format(
+			t_abc, ciphertext)
+		assert ciphertext == t_abc
+		
+		solfa_cipher_msg = SolfaCipherMessage(ciphertext)
+		plaintext = solfa_cipher_msg.decrypt(solfa_key)
+		expected = re.sub("\s+", "", t_pt.upper())
+		print "[>] Plain Text Test"
+		print "\tProvided: {:s}\n\t Created: {:s}".format(	
+			t_pt, plaintext)
+		assert plaintext == expected
+		
+		print ("-"*80)
+		
 def test_encrypt_abcde_treble_major_eight():
 
 	message = "ABCDE"
@@ -1213,6 +1290,15 @@ def test_decrypt_abcde_treble_major_eight2():
 	plaintext = solfa_cipher_msg.decrypt(solfa_key)
 	print plaintext	
 	assert plaintext == "ABCDE"
+	
+def test_decrypt_nsec_tune():
+	key = "[K:C major clef=treble] [L:1/8] [M:none] \"d\"C \"r\"D \"m\"E \"f\"F \"s\"G \"l\"A \"t\"B "
+	tune = "[K:C major clef=none] [L:1/8] [M:none] x1\"Rao's Revolutionary Lullaby\"x|C2 E2 G3 C1 D2 C2 F4 C2 E2 E2 A1 C1 B,3 C1 C2 E2 G3 C1 z2 A2 E3 E1 D4 F4 C2 E2 G3 G1 B,2 C2 G2 F2 B,1 A1 z2 G2 G2 C2 z2 F2 E2 A3 D2 B,4 A2 D2 E4 C4 G4 A4 E4 C4 G3 G1 D4 C2 E2 C2 E2 G4 F4 G2 D2 B,4 A2 G2 z2 E2 E2 A1 C1 C4 B,4 B,3 A1 C4 E4 D4 A4 E2 D2 B,2 F1 F1 z2 A2 G4 C4 G3 C1 z2A2 E3 E4 E1 z2 A2 B,2 C1 D1 C4 B,2 C2 E4 B,1"
+	solfa_key = SolfaKey.from_abc_string(key)
+	print "[>] Key  : " + str(solfa_key)
+	solfa_cipher_msg = SolfaCipherMessage(tune)
+	plaintext = solfa_cipher_msg.decrypt(solfa_key)
+	print plaintext	
 
 def test_key_init():
 	solfa_key_manual = SolfaKey(
@@ -1223,6 +1309,33 @@ def test_key_init():
 	solfa_key_auto = SolfaKey.from_abc_string("[K:C major clef=treble] [L:1/8] [M:none] \"D\"C \"R\"D \"M\"E \"F\"F \"S\"G \"L\"A \"T\"B |] !")
 	print "[>] Manual: " + str(solfa_key_manual)
 	print "[>] Auto  : " + str(solfa_key_auto)
+	
+def to_notes_and_tempo(_notes_and_beats):
+	tempo = 1
+	note_idx = 0
+	nb_notes = len(_notes_and_beats)
+	notes_and_tempo = []
+	while (note_idx < nb_notes):
+		if tempo == 0: tempo = 1
+		(cur_note, cur_beat) = _notes_and_beats[note_idx]
+
+		if cur_note != SOLFA_SL:
+			notes_and_tempo.append((cur_note, tempo))
+
+		tempo = (tempo + cur_beat) % 5
+		note_idx += 1
+	return notes_and_tempo	
+	
+#kandesu -> hunch
+def test_translate():
+	tune = "d2 m2 s3 d1 r2 d2 f4 d2 m2 m2 l1 d1 t3 d1 d2 m2 s3 d1 z2 l3 m3 m1 r4 f4 d2 m2 s3 s1 t2 d2 z2 s2 f2 t1 l1 z2 s2 s2 d2 z2 f2 m2 l3" 
+	tune += " z2 r2 t4 l2 r2 m4 d4 s4 l4 m4 d4 s3 s1 r4 d2 m2 d2 m2 s4 f4 s2 r2 t4 l2 s2 z2 m2 m2 l1 d1 d4 t4 t3 l1 d4 m4 r4 l4 m2 r2 t2 f1 f1 z2 l2 s4 d4 s3 d1 z2 l2 m3 m1"
+	tune += " z3 m1 z2 l2 t2 d1 r1 d4 t2 d2 m4 t1"
+	tune_notes = [(x[:-1], int(x[-1:])) for x in tune.split(" ")]
+	matrix = SolfaMatrix()
+	notes_and_tempo = to_notes_and_tempo(tune_notes)
+	plaintext = matrix.translate_multiple_notes(notes_and_tempo)
+	print plaintext
 #////////////////////////////////////////////////////////////////////////////// 
 # Main
 #
