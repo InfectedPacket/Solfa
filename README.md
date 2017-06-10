@@ -105,4 +105,5 @@ Future Features
 References
 ----------
 
-The Solfa Cipher, http://www.wmich.edu/mus-theo/solfa-cipher/, last visited on 10 Jun 17
+- Racicot, J, The Solfa Cipher (NSEC17 Write-Up), 10 June 2017, http://wp.me/p852om-bj, last visited on 10 June 2017
+- The Solfa Cipher, http://www.wmich.edu/mus-theo/solfa-cipher/, last visited on 10 Jun 17
