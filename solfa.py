@@ -214,9 +214,42 @@ key_options.add_argument("-kr", "--rhythm",
 	default=SOLFA_RHYTHM_EIGHTH,
 	choices=SOLFA_RHYTHMS,
 	help="Specifies the rhythm of the key.")
+decoy_options =parser.add_argument_group("Decoy Key Options", "Options relating to the decoy key")	
+decoy_options.add_argument("-dc", "--decoy-clef",
+	dest="decoy_key_clef",
+	default=SOLFA_UNDEFINED,
+	choices=SOLFA_CLEFS + [SOLFA_UNDEFINED],
+	help="Specifies the clef of the decoy key.")
+decoy_options.add_argument("-dt", "--decoy-tonic",
+	dest="decoy_key_tonic",
+	default=SOLFA_UNDEFINED,
+	choices=SOLFA_TONES + [SOLFA_UNDEFINED],
+	help="Specifies the tonic of the decoy key.")
+decoy_options.add_argument("-dm", "--decoy-mode",
+	dest="decoy_key_mode",
+	default=SOLFA_UNDEFINED,
+	choices=SOLFA_MODES + [SOLFA_UNDEFINED],
+	help="Specifies the mode of the decoy key.")
+decoy_options.add_argument("-dr", "--decoy-rhythm",
+	dest="decoy_key_rhythm",
+	default=SOLFA_UNDEFINED,
+	choices=SOLFA_RHYTHMS + [SOLFA_UNDEFINED],
+	help="Specifies the rhythm of the decoy key.")
+program_options = parser.add_argument_group("Program Options", "Options relating to execution of the program")
+program_options.add_argument("--test",
+	dest="test_mode",
+	action="store_true",
+	help="Initiates testing of the application.")
 #//////////////////////////////////////////////////////////////////////////////
 # Code
 #
+
+DebugMode = True
+
+def debug(_msg):
+	if DebugMode == True:
+		print _msg
+
 class SolfaMatrix(object):
 	'''
 	A SolfaMatrix regroups the variables and methods needed to translate
@@ -367,7 +400,10 @@ class SolfaMatrix(object):
 		if _note in self.matrix.keys():
 			if index >= 0 and index < len(self.matrix[SOLFA_DO]):
 				plain_char = self.matrix[_note][index]
-		print "({:s}, {:d}) -> {:s}".format(_note, _tempo, plain_char)
+		elif _note[0] == SOLFA_STACCATO and _note[1] in self.digit_matrix.keys():
+			if index >= 0 and index < len(self.digit_matrix[SOLFA_DO]):
+				plain_char = self.digit_matrix[_note[1]][index]		
+		debug("({:s}, {:d}) -> {:s}".format(_note, _tempo, plain_char))
 		return plain_char		
 
 	def translate_multiple_notes(self, _notes):
@@ -416,7 +452,7 @@ class SolfaKey(object):
 		@param _meter TODO: description
 		
 		'''
-		#TODO: Check for input values and throw exceptins if needed.
+
 		clef = _clef.lower().strip()
 		if not (clef in SOLFA_CLEFS or clef == SOLFA_UNDEFINED):
 			raise Exception("Invalid clef value provided: {:s}".format(_clef))
@@ -460,7 +496,6 @@ class SolfaKey(object):
 		if len(_abc_string) > 0:
 			tune_metadata = re.findall(r'\[([^]]*)\]', _abc_string)
 			for tune_meta_item in tune_metadata:
-				print tune_meta_item
 				if ":" in tune_meta_item:
 					(meta_property, meta_value) = tune_meta_item.split(":", 1)
 					if meta_property.upper() == "K":
@@ -480,6 +515,8 @@ class SolfaKey(object):
 
 		#solfa_key.scale = re.findall(r'([ABCDEFGz],?[1-4])', _abc_string, flags=re.IGNORECASE)
 		solfa_key._scale()
+		#debug("[>] New key created: " + str(solfa_key))
+		#debug("\t " + ' '.join(["({:s}, {:s})".format(x, y) for (x, y) in solfa_key.scale]))
 		return solfa_key
 		
 	def _scale(self):
@@ -490,6 +527,7 @@ class SolfaKey(object):
 		shift = 0 #todo: remove shift. Unneeded here.
 		tonic = 0
 		self.scale = []
+		
 		if self.tonic[0] == SOLFA_TONE_C:
 			if self.clef == SOLFA_CLEF_TREBLE or self.clef == SOLFA_CLEF_ALTO:
 					tonic = shift + 13
@@ -509,7 +547,7 @@ class SolfaKey(object):
 			if self.clef == SOLFA_CLEF_TREBLE:
 				tonic = shift + 16
 			elif self.clef == SOLFA_CLEF_BASS or self.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 9	
+				tonic = 15 #shift + 9	
 		elif self.tonic[0] == SOLFA_TONE_G:
 			if self.clef == SOLFA_CLEF_TREBLE:
 				tonic = shift + 18
@@ -640,7 +678,27 @@ class SolfaCipherMessage(SolfaMessage):
 		self._parse()
 			
 	def __str__(self):
-		fmt = "{dkey:s} | {notes:s}"
+		'''
+		Returns a string of the message using the ABC notation.
+		
+		The function will return a string containing the key and ciphertext
+		of the message using the following format:
+		
+		"<DecoyKey> <Notes>"
+		
+		Where <DecoyKey> is the results of calling 'str(self.decoy_key)' and
+		<notes> is the string containing the notes of the melody in the ABC
+		notations. Example:
+		
+		>> tune = "[K:none clef=none] [L:none] [M:none] C2 E2 D4 F4 D4 F4 C2 E2 G3 C1 D2 C2 F4 C4 C4 G4 F4 C4"
+		>> solfa_cipher_msg = SolfaCipherMessage(tune)
+		>> s = str(solfa_cipher_msg)
+		
+		s = "[K:none clef=none] [L:none] [M:none] C2 E2 D4 F4 D4 F4 C2 E2 G3 C1 D2 C2 F4 C4 C4 G4 F4 C4"
+		
+		@return A string represention of the message in ABC notation.
+		'''
+		fmt = "{dkey:s} {notes:s}"
 		s = fmt.format(
 			dkey = str(self.decoy_key),
 			notes = self.message)
@@ -665,28 +723,94 @@ class SolfaCipherMessage(SolfaMessage):
 			self.matrix = SolfaMatrix()
 		if self.decoy_key == None:
 			self.decoy_key = super(SolfaCipherMessage, self)._generate_default_key()
-	
-		# Generate the map used to convert chromatic notes to solfege notes using
-		# the scale of the key.
-		chromatic_to_solfege_map = self._generate_scale_map()
-		print "Map:"
-		print chromatic_to_solfege_map
+
+		message = self.message
 		
-		solfege_translation = self.translate_to_solfege(
-			self.notes, chromatic_to_solfege_map)
-			
-		print "Translation:"
-		print solfege_translation
-			
-		# Converts notes and beats to a list of tuple of notes and tempo of the note.
-		notes_and_tempo = self._to_notes_and_tempo(solfege_translation)
-		
-		print "Notes/Duration:"
+		map = self._generate_scale_map()
+		chromatic_notes = self._chromatic_string_to_tuples(message)
+		print chromatic_notes
+		solfege = self.translate_to_solfege(chromatic_notes, map)
+		print solfege
+		notes_and_tempo = self._to_notes_and_tempo(solfege)
 		print notes_and_tempo
-		
 		plaintext = self.matrix.translate_multiple_notes(notes_and_tempo)
 		return plaintext
 	
+	def _read_message(self, _message):
+	
+		message = self.message.replace("z ", "z1 ").replace(SOLFA_BAR, "|0")
+
+		message = message.replace("1 z1 z2 |0 ", "1 ")
+		message = message.replace("1 z2 |0 z1 ", "2 ")
+		message = message.replace("1 z1 |0 z2 ", "3 ")
+		message = message.replace("1 z1 |0 z1 ", "3 ")
+		
+		message = message.replace("1 z2 z1 ", "2 ")
+		message = message.replace("1 z1 z2 ", "3 ")
+		message = message.replace("1 z2 |0 ", "2 ")
+		message = message.replace("3 |0 z1 ", "2 ")
+		message = message.replace("2 |0 z1 ", "3 ")
+		message = message.replace("2 |0 z2 ", "3 ")
+		message = message.replace("1 |0 z1 ", "4 ")
+		message = message.replace("1 |0 z2 ", "4 ")
+		message = message.replace("1 |0 z3 ", "4 ")
+		
+		message = re.sub("1 z1 z2 [A-Za-z]1", "1 ", message)
+		message = re.sub("1 z1 z2 [A-Za-z]3", "3 ", message)
+		message = re.sub("1 z1 z1 [A-Za-z]1", "1 ", message)
+		message = re.sub("1 z1 z1 [A-Za-z]2", "2 ", message)
+		message = message.replace("1 z1 |0 ", "3 ")
+		message = re.sub("1 z2 [A-Za-z]3", "3 ", message)
+		message = re.sub("1 z2 [A-Za-z][34]", "4 ", message)
+		
+		message = re.sub("4 \|0 ?", "1 ", message)
+		message = message.replace("3 z1 ", "2 ")
+		message = re.sub("3 \|0 ?", "2 ", message)
+		message = re.sub("2 \|0 ?", "3 ", message)
+		message = re.sub("1 \|0 ?", "4 ", message)
+		message = message.replace("2 z1 ", "3 ")
+		message = message.replace("2 z2 ", "3 ")
+		message = message.replace("1 z2 ", "2 ")
+		
+		message = re.sub("1 z1 [A-Z]2", "4 ", message)
+		message = re.sub("1 z1 [A-Z]1", "3 ", message)
+		message = re.sub("1 z1 [A-Z]3", "2 ", message)
+		message = re.sub("1 z1 [A-Z]4", "1 ", message)
+		
+		message = re.sub("2 [A-Za-z]4", "2 ", message)
+		
+		message = message.replace("|0", "")
+		return message
+	
+	def _decrypt_from_solfege(self, _solfa_key, _matrix):
+		assert _solfa_key != None
+		assert _matrix != None
+		self.matrix = _matrix
+		solfege = self._solfege_string_to_tuples(self.message)
+		print "Solfege"
+		print solfege
+		notes_and_tempo = self._to_notes_and_tempo(solfege)
+		plaintext = self.matrix.translate_multiple_notes(notes_and_tempo)
+		return plaintext
+	
+	def _chromatic_string_to_tuples(self, _string):
+		# Extracts the notes of the ABC notation tune provided.
+		chr_string = _string.strip().replace(SOLFA_BAR, "|0")
+		notes = re.findall(r'(\.?[ABCDEFGZ\|][0-4])', chr_string.strip(), flags=re.IGNORECASE)
+		translation = []
+		for note in notes:
+			translation.append((note[:-1], int(note[-1])))
+		return translation
+	
+	def _solfege_string_to_tuples(self, _string):
+		# Extracts the notes of the ABC notation tune provided.
+		sol_string = _string.strip().replace(SOLFA_BAR, "|0")
+		notes = re.findall(r'(\.?[DRMFSLTZ\|][0-4])', sol_string.strip(), flags=re.IGNORECASE)
+		translation = []
+		for note in notes:
+			translation.append((note[:-1].lower(), int(note[-1])))
+		return translation
+		
 	def _parse(self):
 		'''
 		
@@ -736,18 +860,13 @@ class SolfaCipherMessage(SolfaMessage):
 					self.notes.append((note, 1))
 				else:
 					self.notes.append((note[:-1], int(note[-1])))
-			print "Notes:"
-			print self.notes
+
 			
 	def _generate_scale_map(self):
 		start_index = SCALES.index(self.key.scale[0][1])
-		#scale_list = SCALES[start_index:] + SCALES[:start_index]
-		#notes_zipped = zip(scale_list, SOLFA_NOTES*5)
 		low = zip(list(reversed(SCALES[:start_index])), list(reversed(SOLFA_NOTES*5)))
 		high = zip(SCALES[start_index:], SOLFA_NOTES*5)
 		notes_zipped = low + high
-		print "Zipped:"
-		print notes_zipped
 		notes_map = {}
 		for (chrome_note, solfa_note) in notes_zipped:
 			notes_map[chrome_note] = solfa_note
@@ -756,10 +875,17 @@ class SolfaCipherMessage(SolfaMessage):
 	def translate_to_solfege(self, _chromatic_notes, _map):
 		solfege_notes = []
 		for (chrome_note, tempo) in _chromatic_notes:
-			if chrome_note in _map.keys():
-				solfege_note = _map[chrome_note]
+			solfege_note = ""
+			c_note = chrome_note[0]
+			if chrome_note[0] == SOLFA_STACCATO:
+				solfege_note = SOLFA_STACCATO
+				c_note = chrome_note[1]
+				
+			if c_note in _map.keys():
+				solfege_note += _map[c_note]
 			else:
-				solfege_note = chrome_note
+				solfege_note += chrome_note
+					
 			solfege_notes.append((solfege_note, tempo))
 			
 		return solfege_notes		
@@ -769,15 +895,18 @@ class SolfaCipherMessage(SolfaMessage):
 		note_idx = 0
 		nb_notes = len(_notes_and_beats)
 		notes_and_tempo = []
+		prev_note = None
+
 		while (note_idx < nb_notes):
 			if tempo == 0: tempo = 1
 			(cur_note, cur_beat) = _notes_and_beats[note_idx]
 
-			if cur_note != SOLFA_SL:
+			if cur_note != SOLFA_SL and cur_note != SOLFA_BAR:
 				notes_and_tempo.append((cur_note, tempo))
-
-			tempo = (tempo + cur_beat) % 5
+				prev_note = cur_note
+				tempo = (tempo + cur_beat) % 5
 			note_idx += 1
+			
 		return notes_and_tempo
 		
 class SolfaPlainMessage(SolfaMessage):
@@ -851,20 +980,56 @@ class SolfaPlainMessage(SolfaMessage):
 		(0.3, 3.0): [1, (SOLFA_SL, 1), (SOLFA_SL, 2)],
 		(0.3, 4.0): [1],
 
-		(0.3, 0.1): [1, ("z", 1)],
-		(0.3, 0.2): [1, ("z", 1), ("z", 1)],
-		(0.3, 0.3): [1, ("z", 1), ("z", 2)],
+		(0.3, 0.1): [1, (SOLFA_SL, 1)],
+		(0.3, 0.2): [1, (SOLFA_SL, 1), (SOLFA_SL, 1)],
+		(0.3, 0.3): [1, (SOLFA_SL, 1), (SOLFA_SL, 2)],
 		(0.3, 0.4): [1],
 
 		(0.4, 1.0): [1],
-		(0.4, 2.0): [1, ("z", 1)],
-		(0.4, 3.0): [1, ("z", 2)],
-		(0.4, 4.0): [1, ("z", 3)],
+		(0.4, 2.0): [1, (SOLFA_SL, 1)],
+		(0.4, 3.0): [1, (SOLFA_SL, 2)],
+		(0.4, 4.0): [1, (SOLFA_SL, 3)],
 
 		(0.4, 0.1): [1],
-		(0.4, 0.2): [1, ("z", 1)],
-		(0.4, 0.3): [1, ("z", 2)],
-		(0.4, 0.4): [1, ("z", 3)]
+		(0.4, 0.2): [1, (SOLFA_SL, 1)],
+		(0.4, 0.3): [1, (SOLFA_SL, 2)],
+		(0.4, 0.4): [1, (SOLFA_SL, 3)]
+	}
+	
+	clefs_shift = {
+		(SOLFA_CLEF_TREBLE, SOLFA_CLEF_ALTO)	: -6,
+		(SOLFA_CLEF_TREBLE, SOLFA_CLEF_BASS)	: -12,
+		(SOLFA_CLEF_TREBLE, SOLFA_UNDEFINED)	: 0,
+		(SOLFA_CLEF_ALTO, SOLFA_UNDEFINED)		: 6,
+		(SOLFA_CLEF_ALTO, SOLFA_CLEF_TREBLE)	: 6,
+		(SOLFA_CLEF_ALTO, SOLFA_CLEF_BASS)		: -6,
+		(SOLFA_CLEF_BASS, SOLFA_UNDEFINED)		: 12,
+		(SOLFA_CLEF_BASS, SOLFA_CLEF_TREBLE)	: 12,
+		(SOLFA_CLEF_BASS, SOLFA_CLEF_ALTO)		: 6,
+	}
+	
+	clef_tonic_shift = {
+		(SOLFA_TONE_C, SOLFA_CLEF_TREBLE):	13,
+		(SOLFA_TONE_C, SOLFA_CLEF_ALTO):	13,
+		(SOLFA_TONE_C, SOLFA_CLEF_BASS):	6,
+		(SOLFA_TONE_D, SOLFA_CLEF_TREBLE):	14,
+		(SOLFA_TONE_D, SOLFA_CLEF_ALTO):	14,
+		(SOLFA_TONE_D, SOLFA_CLEF_BASS):	7,	
+		(SOLFA_TONE_E, SOLFA_CLEF_TREBLE):	15,
+		(SOLFA_TONE_E, SOLFA_CLEF_ALTO):	8,
+		(SOLFA_TONE_E, SOLFA_CLEF_BASS):	8,	
+		(SOLFA_TONE_F, SOLFA_CLEF_TREBLE):	16,
+		(SOLFA_TONE_F, SOLFA_CLEF_ALTO):	9,
+		(SOLFA_TONE_F, SOLFA_CLEF_BASS):	9,
+		(SOLFA_TONE_G, SOLFA_CLEF_TREBLE):	18,
+		(SOLFA_TONE_G, SOLFA_CLEF_ALTO):	10,
+		(SOLFA_TONE_G, SOLFA_CLEF_BASS):	10,	
+		(SOLFA_TONE_A, SOLFA_CLEF_TREBLE):	18,
+		(SOLFA_TONE_A, SOLFA_CLEF_ALTO):	11,
+		(SOLFA_TONE_A, SOLFA_CLEF_BASS):	4,	
+		(SOLFA_TONE_B, SOLFA_CLEF_TREBLE):	19,
+		(SOLFA_TONE_B, SOLFA_CLEF_ALTO):	12,
+		(SOLFA_TONE_B, SOLFA_CLEF_BASS):	5
 	}
 	
 	def __init__(self, _plaintext = ""):
@@ -915,76 +1080,33 @@ class SolfaPlainMessage(SolfaMessage):
 		chromatic_notes_and_beats.append((SOLFA_BAR, 1))
 		
 		bar_value = self._bar_value(self.key.rhythm_unit, self.key.meter)
-		
+
 		# Converts the melody into the ABC notation so it can be 
 		# translated into other formats.
 		#ciphertext = self._to_abc_notation(chromatic_notes_and_beats, bar_value)
 		ciphertext = self._beats_to_notes(chromatic_notes_and_beats, bar_value)
 		ciphertext = ' '.join(
 		["{n:s}{t:d}".format(n=note, t=time) for (note, time) in ciphertext])
-		return SolfaCipherMessage(ciphertext)
+		ciphertext = ciphertext.replace("|0", SOLFA_BAR).replace("z1", "z")
+		solfa_cipher_msg = SolfaCipherMessage(ciphertext)
+		solfa_cipher_msg.decoy_key = self.decoy_key
+		return solfa_cipher_msg
 		
 	def _calculate_delta_tonic(self, _key, _decoy_key):
+		'''
+		
+		@param _key
+		@param _decoy_key
+		@return 
+		'''
 		shift = 0
 		tonic = 0
 		
-		if _key.clef == SOLFA_CLEF_TREBLE:
-			if _decoy_key.clef == SOLFA_CLEF_ALTO:
-				shift = -6
-			elif _decoy_key.clef == SOLFA_CLEF_BASS:
-				shift = -12
-		elif _key.clef == SOLFA_CLEF_ALTO:
-			if _decoy_key.clef == SOLFA_UNDEFINED or _decoy_key.clef == SOLFA_CLEF_TREBLE:
-				shift = 6
-			elif _decoy_key.clef == SOLFA_CLEF_BASS:
-				shift = -6
-		elif _key.clef == SOLFA_CLEF_BASS:
-			if _decoy_key.clef == SOLFA_UNDEFINED or _decoy_key.clef == SOLFA_CLEF_TREBLE:
-				shift = 12
-			elif _decoy_key.clef == SOLFA_CLEF_ALTO:
-				shift = 6
-		
-		if _key.tonic[0] == SOLFA_TONE_C:
-			if _key.clef == SOLFA_CLEF_TREBLE or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 13
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 6
-		elif _key.tonic[0] == SOLFA_TONE_D:
-			if _key.clef == SOLFA_CLEF_TREBLE or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 14
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 7
-		elif _key.tonic[0] == SOLFA_TONE_E:
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 15
-			elif _key.clef == SOLFA_CLEF_BASS or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 8
-		elif _key.tonic[0] == SOLFA_TONE_F:
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 16
-			elif _key.clef == SOLFA_CLEF_BASS or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 9	
-		elif _key.tonic[0] == SOLFA_TONE_G:
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 18
-			elif _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 10
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 3
-		elif _key.tonic[0] == SOLFA_TONE_A:
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 18
-			elif _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 11
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 4
-		elif _key.tonic[0] == SOLFA_TONE_B:
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 19
-			elif _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 12
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 5
+		if _key.clef != _decoy_key.clef:
+			shift = SolfaPlainMessage.clefs_shift[
+				(_key.clef, _decoy_key.clef)]
+
+		tonic = SolfaPlainMessage.clef_tonic_shift[(_key.tonic[0], _key.clef)] + shift
 		return tonic
 	
 	def _translate_to_chromatic_note(self, _note, _tonic):
@@ -1027,15 +1149,23 @@ class SolfaPlainMessage(SolfaMessage):
 			notes.append(self._translate_to_chromatic_note(note, _tonic))
 		return notes
 	
-	def _bar_value(self, _unit, _time):
+	def _bar_value(self, _unit, _meter):
+		'''
+		Determines the length a musical measure, i.e. at which 
+		rhythm a bar will be inserted.
+		
+		@param _unit The rhytmic unit of the melody
+		@param _meter The musical metre of the melody.
+		@return The value at which a bar should be insert.
+		'''
 		if _unit == SOLFA_RHYTHM_SIXTEEN:
-			return int(_time[0])
+			return int(_meter[0])
 		elif _unit == SOLFA_RHYTHM_EIGHTH:
-			if _time[0] == "2":
+			if _meter[0] == "2":
 				return 1
-			elif _time[0] == "3":
+			elif _meter[0] == "3":
 				return 100
-			elif _time[0] == "4":
+			elif _meter[0] == "4":
 				return 2
 		elif _unit == SOLFA_RHYTHM_QUARTER:
 			return 1
@@ -1045,155 +1175,270 @@ class SolfaPlainMessage(SolfaMessage):
 	def _beats_to_notes(self, _chromatic_notes_and_beats, _bar_value):
 		'''
 		
+		@param _chromatic_notes_and_beats
+		@param _bar_value
+		Reference:
+			Solfa 1.2, http://www.wmich.edu/mus-theo/solfa-cipher/
 		'''
 		notes_and_timings = []
 		idx_note = 0
 		bar = _bar_value
 		dbt = 0
 		cnt = bar
+			
 		nb_notes = len(_chromatic_notes_and_beats)
 
 		while idx_note < nb_notes-1:
 			(note, beat) = _chromatic_notes_and_beats[idx_note]
 			idx_note += 1
 			(next_note, next_beat) = _chromatic_notes_and_beats[idx_note]
-			print "({:f}, {:f})".format(beat, next_beat)
-			notes = SolfaPlainMessage.beats_to_notes[(beat, next_beat)]
-			if len(notes) > 0:
-				timing = notes[0]
-				notes_and_timings.append((note, timing))
-				if len(notes) > 1:
-					notes_and_timings += notes[1:]
-			else:
-				raise Exception("Invalid 'beats_to_notes' table. Entry has no notes translation: ({:f}, {:f})".format(beat, next_beat))
-		
+			if beat == 1 and next_beat in [0.1, 1]:
+				notes_and_timings.append((note, 4))
+				if dbt == 0:
+				  dbt = 1;
+				  cnt = 2;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings+= [(SOLFA_BAR, 0)]
+				  cnt = 1;
+				else:
+				  cnt = cnt + 1;
+			elif beat == 1 and next_beat in [0.3, 3]:
+				notes_and_timings.append((note, 2))
+				if dbt == 0:
+					cnt = 1;
+				dbt = 1;
+			elif beat == 1 and next_beat in [0.4, 4]:
+				notes_and_timings.append((note, 3))
+				if dbt == 0:
+					cnt = 1;
+				dbt = 1;
+			elif beat == 0.1 and next_beat in [0.1, 1]:
+				notes_and_timings += [(note, 1), (SOLFA_SL, 1), (SOLFA_SL, 2)]
+				if dbt == 0:
+				  dbt = 1;
+				  cnt = 2;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(SOLFA_BAR, 0)]
+				  cnt = 1;
+				else:
+				  cnt = cnt + 1;
+			elif beat in [0.1, 1] and next_beat in [0.2, 2]:
+				notes_and_timings.append((note, 1))
+				if dbt == 0:
+					cnt = 1;
+				dbt = 1;
+			elif beat == 0.1 and next_beat in [0.3, 3]:
+				notes_and_timings += [(note, 1), (SOLFA_SL, 1)]
+				if dbt == 0:
+					cnt = 1;
+				dbt = 1;
+			elif beat == 0.1 and next_beat in [0.4, 4]:
+				notes_and_timings += [(note, 1), (SOLFA_SL, 1), (SOLFA_SL, 1)]
+				if dbt == 0:
+					cnt = 1;
+				dbt = 1;
+			elif beat == 2 and next_beat in [0.1, 1]:
+				notes_and_timings += [(note, 3)]
+				if dbt == 0 and bar == 100:
+					notes_and_timings += [("|", 0)]
+					cnt = 1;
+					dbt = 1;
+				elif cnt == bar and bar < 100:
+					notes_and_timings += [("|", 0)]
+					cnt = 1;
+				else:
+					cnt = cnt + 1;
+			elif beat == 2 and next_beat in [0.2, 2]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 3), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 3), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 3), ("z", 1)]
+				  cnt = cnt + 1;
+			elif beat == 0.2 and next_beat in [0.1, 1]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), (SOLFA_SL, 2), (SOLFA_SL, 0)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("z", 2), ("|", 0)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 2)]
+				  cnt = cnt + 1;
+			elif beat == 0.2 and next_beat in [0.2, 2]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("z", 2), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("z", 2), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 2), ("z", 1)]
+				  cnt = cnt + 1;
+			elif beat in [0.2, 2] and next_beat in [0.3, 3]:
+				notes_and_timings += [(note, 1)]
+			elif beat == 2 and next_beat == 4:
+				notes_and_timings += [(note, 2)]
+			elif beat == 0.2 and next_beat in [0.4, 4]:
+				notes_and_timings += [(note, 1), ("z", 1)]
+			elif beat == 3 and next_beat in [0.1, 1]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 2), ("|", 0)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 2), ("|", 0)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 2)]
+				  cnt = cnt + 1;
+			elif beat == 0.3 and next_beat in [0.1, 1]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("z", 1), ("|", 0)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("z", 1), ("|", 0)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 1)]
+				  cnt = cnt + 1;
+			elif beat == 3 and next_beat in [0.2, 2]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 2), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 2), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 2), ("z", 1)]
+				  cnt = cnt + 1;
+			elif beat == 0.3 and next_beat in [0.2, 2]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("z", 1), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("z", 1), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 1), ("z", 1)]
+				  cnt = cnt + 1;
+			elif beat == 3 and next_beat in [0.3, 3]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 2), ("|", 0), ("z", 2)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 2), ("|", 0), ("z", 2)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 2), ("z", 2)]
+				  cnt = cnt + 1;
+			elif beat == 0.3 and next_beat in [0.3, 3]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("z", 1), ("|", 0), ("z", 2)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("z", 1), ("|", 0), ("z", 2)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 1), ("z", 2)]
+				  cnt = cnt + 1;
+			elif beat in [0.3, 3] and next_beat in [0.4, 4]:
+				notes_and_timings += [(note, 1)]
+			elif beat in [0.4, 4] and next_beat in [0.1, 1]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("|", 0)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("|", 0)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1)]
+				  cnt = cnt + 1;
+			elif beat in [0.4, 4] and next_beat in [0.2, 2]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("|", 0), ("z", 1)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 1)]
+				  cnt = cnt + 1;
+			elif beat in [0.4, 4] and next_beat in [0.3, 3]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("|", 0), ("z", 2)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("|", 0), ("z", 2)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 2)]
+				  cnt = cnt + 1;
+			elif beat in [0.4, 4] and next_beat in [0.4, 4]:
+				if dbt == 0 and bar == 100:
+				  notes_and_timings += [(note, 1), ("|", 0), ("z", 3)]
+				  cnt = 1;
+				  dbt = 1;
+				elif cnt == bar and bar < 100:
+				  notes_and_timings += [(note, 1), ("|", 0), ("z", 3)]
+				  cnt = 1;
+				else:
+				  notes_and_timings += [(note, 1), ("z", 2)]
+				  cnt = cnt + 1;
+
 		return notes_and_timings
 		
-def parse_key(self, _keystr):
-	'''
-	
-	'''
-	tune_mode = SOLFA_UNDEFINED
-	tune_tonic = SOLFA_UNDEFINED
-	tune_clef = SOLFA_UNDEFINED
-	tune_rhythm_unit = SOLFA_UNDEFINED
-	tune_meter = SOLFA_UNDEFINED
-	
-	if len(_keystr) > 0:
-		tune_metadata = re.findall(r'\[([^]]*)\]', _keystr)
-		for tune_meta_item in tune_metadata:
-			if ":" in tune_meta_item:
-				(meta_property, meta_value) = tune_meta_item.split(":", 1)
-				if meta_property.upper() == "K":
-					(tune_key, tune_clef) = re.match("(\w\s?\w+)\s*clef\s*=\s*(\w+)", meta_value).groups()
-					tune_tonic = tune_key[0].upper()
-					if " " in tune_key:
-						tune_mode = tune_key.split(" ", 1)[1].lower()
-					else:
-						tune_mode = tune_key[1:].lower()
-						
-				elif meta_property.upper() == "L":
-					tune_rhythm_unit = meta_value
-				elif meta_property.upper() == "M":
-					tune_meter = meta_value
-		
-		
-		self.decoy_key = SolfaKey(
-			_clef = tune_clef,
-			_mode = tune_mode,
-			_tonic = tune_tonic,
-			_rhythm = tune_rhythm_unit,
-			_meter = tune_meter)
-		self.notes = re.findall(r'([ABCDEFGz],?[1-4])', self.message, flags=re.IGNORECASE)
-
-def calculate_tonic(_key, _decoy_key):
-		shift = 0
-		tonic = 0
-		
-		if _key.clef == SOLFA_CLEF_TREBLE:
-			if _decoy_key.clef == SOLFA_CLEF_ALTO:
-				shift = -6
-			elif _decoy_key.clef == SOLFA_CLEF_BASS:
-				shift = -12
-		elif _key.clef == SOLFA_CLEF_ALTO:
-			if _decoy_key.clef == SOLFA_UNDEFINED or _decoy_key.clef == SOLFA_CLEF_TREBLE:
-				shift = 6
-			elif _decoy_key.clef == SOLFA_CLEF_BASS:
-				shift = -6
-		elif _key.clef == SOLFA_CLEF_BASS:
-			if _decoy_key.clef == SOLFA_UNDEFINED or _decoy_key.clef == SOLFA_CLEF_TREBLE:
-				shift = 12
-			elif _decoy_key.clef == SOLFA_CLEF_ALTO:
-				shift = 6
-		
-		if _key.tonic[0] == "C":
-			if _key.clef == SOLFA_CLEF_TREBLE or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 13
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 6
-		elif _key.tonic[0] == "D":
-			if _key.clef == SOLFA_CLEF_TREBLE or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 14
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 7
-		elif _key.tonic[0] == "E":
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 15
-			elif _key.clef == SOLFA_CLEF_BASS or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 8
-		elif _key.tonic[0] == "F":
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 16
-			elif _key.clef == SOLFA_CLEF_BASS or _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 9	
-		elif _key.tonic[0] == "G":
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 18
-			elif _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 10
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 3
-		elif _key.tonic[0] == "A":
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 18
-			elif _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 11
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 4
-		elif _key.tonic[0] == "B":
-			if _key.clef == SOLFA_CLEF_TREBLE:
-				tonic = shift + 19
-			elif _key.clef == SOLFA_CLEF_ALTO:
-				tonic = shift + 12
-			elif _key.clef == SOLFA_CLEF_BASS:
-				tonic = shift + 5
-		return tonic
-	
 def test():
 	test_solfa()
-	#test_abcde_treble_major_eight()
-	#test_hello_alto_minor_quarter()
-	#test_secret_bass_phrygian_sixteen_decoy_1()
-	#test_decrypt_abcde_treble_major_eight()
-	#test_decrypt_abcde_alto_major_eight()
-	#test_encrypt_abcde_treble_major_eight()
-	#test_decrypt_abcde_treble_major_eight2()
-	#test_encrypt_12345_treble_major_eight()
-	#test_key_init()
-	#test_decrypt_nsec_tune()
-	#test_translate()
-
+	test_tmp()
+	
 def test_solfa():
 	tests = [
+		(
+# Failing::		
+		# Encryption key
+		"[K:A minor clef=treble] [L:1/8] [M:4/4]",
+		# Plain text Message
+		"20CHEESE", 					
+		# Expected result:
+		"[K:A minor clef=treble] [L:1/8] [M:4/4] .r3 .m3 R3 M3 S1 S1 F1 S1",
+		# ABC Notation of Cipher text
+		"[K:none clef=none] [L:none] [M:none] .B1 z | z2 .c1 z z2 B2 | z2 c2 e4 e4 | d4 e4 |"
+		),	
+		(
+# Failing::		
+		# Encryption key
+		"[K:F lydian clef=alto] [L:1/16] [M:4/4]",
+		# Plain text Message
+		"WARAU SALESMAN", 					
+		# Expected result:
+		"[K:F lydian clef=alto] [L:1/16] [M:4/4] S4 M1 D3 M1 T3 F1 M1 L3 S1 F1 F3 M1 L1",
+		# ABC Notation of Cipher text
+		"[K:none clef=none] [L:none] [M:none] B1 G2 E2 G2 D2 A4 G2 c2 B4 A2 A2 G4 c4"
+		),
 		(
 		# Encryption key
 		"[K:C major clef=treble] [L:1/8] [M:4/4]",
 		# Plain text Message
 		"This is the first test", 					
 		# Expected result:
-		"[K:C major clef=treble] [L:1/8] [M:4/4] | D1 M3 R1 F1 R1 F1 D1 M3 S1 D4 R1 D3 F1 D1 D1 S1 F1 D1",
+		"[K:C major clef=treble] [L:1/8] [M:4/4] D1 M3 R1 F1 R1 F1 D1 M3 S1 D4 R1 D3 F1 D1 D1 S1 F1 D1",
 		# ABC Notation of Cipher text
-		"[K:none clef=none] [L:none] [M:none] | C2 E2 D4 F4 D4 F4 C2 E2 G3 C1 D2 C2 F4 C4 C4 G4 F4 C4"
+		"[K:none clef=none] [L:none] [M:none] C2 E2 D4 F4 D4 F4 C2 E2 G3 C1 D2 C2 F4 C4 C4 G4 F4 C4"
 		)
 	]
 	
@@ -1224,123 +1469,60 @@ def test_solfa():
 		assert plaintext == expected
 		
 		print ("-"*80)
+
+def test_tmp():
+	key_str = "[K:A minor clef=alto] [L:1/8] [M:none]"
+	ciphertext = "[K:none clef=none] [L:1/4] [M:none] M1 L4 R3 S3 S1"
+	ciphertext = "[K:none clef=none] [L:none] [M:none] S1 | M2 D2 M2 T2"
+	expected = "WARAU"
+	
+	solfa_key = SolfaKey.from_abc_string(key_str)
+	solfa_cipher_msg = SolfaCipherMessage(ciphertext)
+	
+	plaintext = solfa_cipher_msg._decrypt_from_solfege(solfa_key, SolfaMatrix())
+	print "[>] Plain Text Test"
+	print "\tProvided: {:s}\n\t Created: {:s}".format(	
+		expected, plaintext)
+	assert plaintext == expected
 		
-def test_encrypt_abcde_treble_major_eight():
 
-	message = "ABCDE"
-	solfa_matrix = SolfaMatrix()
-	solfa_key = SolfaKey(
-		_clef = SOLFA_CLEF_TREBLE, 
-		_tonic = "C",
-		_mode = SOLFA_MODE_MAJOR, 
-		_rhythm = SOLFA_RHYTHM_EIGHTH)
-	decoy_key = SolfaKey(
-		_clef = SOLFA_UNDEFINED, 
-		_tonic = SOLFA_UNDEFINED,
-		_mode = SOLFA_UNDEFINED, 
-		_rhythm = SOLFA_UNDEFINED)
-	
-	solfa_plain_msg = SolfaPlainMessage(message)
-	solfa_cipher_msg = solfa_plain_msg.encrypt(solfa_key, decoy_key)
-	ciphertext = str(solfa_cipher_msg)
-	test_result = (ciphertext == "E3 A1 z2 D2 z2 G2 G4")
-	
-	print "[+] Key: {k:s}".format(k=str(solfa_key))
-	print "[<] {pt:s}".format(pt=message)
-	print "[>] {ct:s}".format(ct=ciphertext)
-	print "[=] {rs:s}".format(rs=str(test_result))
-	assert test_result
-	
-def test_encrypt_12345_treble_major_eight():
-
-	message = "12345"
-	solfa_matrix = SolfaMatrix()
-	solfa_key = SolfaKey(
-		_clef = SOLFA_CLEF_TREBLE, 
-		_tonic = "C",
-		_mode = SOLFA_MODE_MAJOR, 
-		_rhythm = SOLFA_RHYTHM_EIGHTH)
-	decoy_key = SolfaKey(
-		_clef = SOLFA_UNDEFINED, 
-		_tonic = SOLFA_UNDEFINED,
-		_mode = SOLFA_UNDEFINED, 
-		_rhythm = SOLFA_UNDEFINED)
-	
-	solfa_plain_msg = SolfaPlainMessage(message)
-	solfa_cipher_msg = solfa_plain_msg.encrypt(solfa_key, decoy_key)
-	ciphertext = str(solfa_cipher_msg)
-	test_result = (ciphertext == ".C1 z1 .D1 z1 .E1 z1 .F1 z1 .G1 z1 z2")
-	
-	print "[+] Key: {k:s}".format(k=str(solfa_key))
-	print "[<] {pt:s}".format(pt=message)
-	print "[>] {ct:s}".format(ct=ciphertext)
-	print "[=] {rs:s}".format(rs=str(test_result))
-	assert test_result	
-	
-def test_decrypt_abcde_treble_major_eight2():
-	key = "[K:C major clef=treble] [L:1/8] [M:none] \"D\"C \"R\"D \"M\"E \"F\"F \"S\"G \"L\"A \"T\"B |] !"
-	tune = "[K:C major clef=none] [L:1/8] [M:none] E3 A1 z2 D2 z2 G2 G4"
-	solfa_key = SolfaKey(
-		_clef = SOLFA_CLEF_TREBLE, 
-		_tonic = "C",
-		_mode = SOLFA_MODE_MAJOR, 
-		_rhythm = SOLFA_RHYTHM_EIGHTH)
-	solfa_key.scale = [("d", "C"), ("r", "D"), ("m", "E"), ("f", "F"), ("s", "G"), ("l", "A"), ("t", "B")]
-	solfa_cipher_msg = SolfaCipherMessage(tune)
-	plaintext = solfa_cipher_msg.decrypt(solfa_key)
-	print plaintext	
-	assert plaintext == "ABCDE"
-	
-def test_decrypt_nsec_tune():
-	key = "[K:C major clef=treble] [L:1/8] [M:none] \"d\"C \"r\"D \"m\"E \"f\"F \"s\"G \"l\"A \"t\"B "
-	tune = "[K:C major clef=none] [L:1/8] [M:none] x1\"Rao's Revolutionary Lullaby\"x|C2 E2 G3 C1 D2 C2 F4 C2 E2 E2 A1 C1 B,3 C1 C2 E2 G3 C1 z2 A2 E3 E1 D4 F4 C2 E2 G3 G1 B,2 C2 G2 F2 B,1 A1 z2 G2 G2 C2 z2 F2 E2 A3 D2 B,4 A2 D2 E4 C4 G4 A4 E4 C4 G3 G1 D4 C2 E2 C2 E2 G4 F4 G2 D2 B,4 A2 G2 z2 E2 E2 A1 C1 C4 B,4 B,3 A1 C4 E4 D4 A4 E2 D2 B,2 F1 F1 z2 A2 G4 C4 G3 C1 z2A2 E3 E4 E1 z2 A2 B,2 C1 D1 C4 B,2 C2 E4 B,1"
-	solfa_key = SolfaKey.from_abc_string(key)
-	print "[>] Key  : " + str(solfa_key)
-	solfa_cipher_msg = SolfaCipherMessage(tune)
-	plaintext = solfa_cipher_msg.decrypt(solfa_key)
-	print plaintext	
-
-def test_key_init():
-	solfa_key_manual = SolfaKey(
-		_clef = SOLFA_CLEF_TREBLE, 
-		_tonic = "C",
-		_mode = SOLFA_MODE_MAJOR, 
-		_rhythm = SOLFA_RHYTHM_EIGHTH)
-	solfa_key_auto = SolfaKey.from_abc_string("[K:C major clef=treble] [L:1/8] [M:none] \"D\"C \"R\"D \"M\"E \"F\"F \"S\"G \"L\"A \"T\"B |] !")
-	print "[>] Manual: " + str(solfa_key_manual)
-	print "[>] Auto  : " + str(solfa_key_auto)
-	
-def to_notes_and_tempo(_notes_and_beats):
-	tempo = 1
-	note_idx = 0
-	nb_notes = len(_notes_and_beats)
-	notes_and_tempo = []
-	while (note_idx < nb_notes):
-		if tempo == 0: tempo = 1
-		(cur_note, cur_beat) = _notes_and_beats[note_idx]
-
-		if cur_note != SOLFA_SL:
-			notes_and_tempo.append((cur_note, tempo))
-
-		tempo = (tempo + cur_beat) % 5
-		note_idx += 1
-	return notes_and_tempo	
-	
-#kandesu -> hunch
-def test_translate():
-	tune = "d2 m2 s3 d1 r2 d2 f4 d2 m2 m2 l1 d1 t3 d1 d2 m2 s3 d1 z2 l3 m3 m1 r4 f4 d2 m2 s3 s1 t2 d2 z2 s2 f2 t1 l1 z2 s2 s2 d2 z2 f2 m2 l3" 
-	tune += " z2 r2 t4 l2 r2 m4 d4 s4 l4 m4 d4 s3 s1 r4 d2 m2 d2 m2 s4 f4 s2 r2 t4 l2 s2 z2 m2 m2 l1 d1 d4 t4 t3 l1 d4 m4 r4 l4 m2 r2 t2 f1 f1 z2 l2 s4 d4 s3 d1 z2 l2 m3 m1"
-	tune += " z3 m1 z2 l2 t2 d1 r1 d4 t2 d2 m4 t1"
-	tune_notes = [(x[:-1], int(x[-1:])) for x in tune.split(" ")]
-	matrix = SolfaMatrix()
-	notes_and_tempo = to_notes_and_tempo(tune_notes)
-	plaintext = matrix.translate_multiple_notes(notes_and_tempo)
-	print plaintext
 #////////////////////////////////////////////////////////////////////////////// 
 # Main
 #
 def main(args):
-	test()
+	test_mode = args.test_mode
+	if test_mode:
+		DebugMode = True
+		test()
+	else:
+		message = args.message
+		key_tone = args.key_tonic
+		key_mode = args.key_mode
+		key_clef = args.key_clef
+		key_rhythm = args.key_rhythm
+		decoy_key_clef = args.decoy_key_clef
+		decoy_key_tone = args.decoy_key_tonic
+		decoy_key_mode = args.decoy_key_mode
+		decoy_key_rhythm = args.decoy_key_rhythm
+		do_decrypt = args.do_decrypt
+		
+		solfa_key = SolfaKey(
+			_clef	= key_clef, 
+			_tonic	= key_tone,
+			_mode	= key_mode, 
+			_rhythm = key_rhythm)
+		
+		if do_decrypt:
+			print "[-] Decryption of Solfa encrypted messages is unavailable at the moment."
+		else:
+			decoy_key = SolfaKey(
+				_clef	= decoy_key_clef, 
+				_tonic	= decoy_key_tone,
+				_mode	= decoy_key_mode, 
+				_rhythm = decoy_key_rhythm)
+			solfa_plain_msg = SolfaPlainMessage(message)
+			solfa_cipher = solfa_plain_msg.encrypt(solfa_key, decoy_key)
+			print str(solfa_cipher)
 	
 if __name__ == "__main__": 
 	main(parser.parse_args())	
