@@ -84,7 +84,11 @@ You can also include a decoy key, which will further obfuscate the resulting cip
 .\solfa.py -m 12345 -kt C -km major -kc treble -kr 1/8 -dt E -dm minor -dc alto
 ```
 
-In the case aboce, we use an additional decoy in *C minor* on the *alto* key using the `-dt`, `-dm` and `-dc` parameters. You can also specify a decoy rhythm using the `-dr` parameter. 
+In the case aboce, we use an additional decoy in *C minor* on the *alto* key using the `-dt`, `-dm` and `-dc` parameters. You can also specify a decoy rhythm using the `-dr` parameter. The command above will output this Solfa encrypted melody:
+
+```
+[K:E minor clef=alto] [L:none] [M:4/4] .D,1 z .E,1 z .F,1 z .G,1 z | .A,1 z z2
+```
 
 Known Issues
 ------------
